@@ -154,11 +154,11 @@
   .btn-primary:active { transform: scale(0.98); }
 
   .btn-ghost {
-    background: transparent;
+    background: var(--surface2);
     border: 1px solid var(--border);
-    color: var(--muted);
+    color: var(--text);
   }
-  .btn-ghost:hover { border-color: var(--accent2); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--accent2); background: var(--surface); }
 
   .btn-sm { padding: 7px 14px; font-size: 12px; }
   .btn-danger { border-color: #5a2020; color: #c46060; }
@@ -384,18 +384,18 @@
      CONFIGURATION — paste your Firebase config below
      ═══════════════════════════════════════════════════ -->
 <script>
- const firebaseConfig = {
-  apiKey: "AIzaSyCVHFAEXQf1VxAgm9hXVUocCvRJrZTKA_w",
-  authDomain: "pushlog-v1.firebaseapp.com",
-  databaseURL: "https://pushlog-v1-default-rtdb.firebaseio.com",
-  projectId: "pushlog-v1",
-  storageBucket: "pushlog-v1.firebasestorage.app",
-  messagingSenderId: "513754119249",
-  appId: "1:513754119249:web:3c379a439567851e270c70"
-};
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCVHFAEXQf1VxAgm9hXVUocCvRJrZTKA_w",
+    authDomain: "pushlog-v1.firebaseapp.com",
+    databaseURL: "https://pushlog-v1-default-rtdb.firebaseio.com",
+    projectId: "pushlog-v1",
+    storageBucket: "pushlog-v1.firebasestorage.app",
+    messagingSenderId: "513754119249",
+    appId: "1:513754119249:web:3c379a439567851e270c70"
+  };
 
   // ↓ Change this to whatever passphrase your crew will use ↓
-  const GROUP_CODE = "pushpushpower";
+  const GROUP_CODE = "pushups2025";
 </script>
 <!-- ═══════════════════════════════════════════════════ -->
 
@@ -530,16 +530,15 @@ function renderAuth() {
         <div class="card-label">your name</div>
         <div class="row">
           <input type="text" id="uname" placeholder="what should we call you?" maxlength="28" />
-          <button class="btn-primary" onclick="doJoin()">join</button>
+          <button class="btn-primary" id="join-btn">join</button>
         </div>
         <p class="note">pick any name — this is how your crew will see you</p>
       </div>
     </div>
   `;
-  setTimeout(() => {
-    document.getElementById('gcode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('uname').focus(); });
-    document.getElementById('uname').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
-  }, 50);
+  document.getElementById('join-btn').addEventListener('click', doJoin);
+  document.getElementById('gcode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('uname').focus(); });
+  document.getElementById('uname').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
 }
 
 function doJoin() {
@@ -605,14 +604,14 @@ function renderHome() {
         ${tc > 0 ? `<div class="today-banner"><div class="dot"></div>you've logged ${tc} today — add more below</div>` : ''}
         <div class="row">
           <input type="number" id="pcount" placeholder="how many?" min="1" max="9999" />
-          <button class="btn-primary" onclick="doLog()">log</button>
+          <button class="btn-primary" id="log-btn">log</button>
         </div>
       </div>
 
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
           <div class="card-label" style="margin:0">your recent logs</div>
-          <button class="btn-ghost btn-sm" onclick="renderHistory('${key}', '${me}', true)">view all</button>
+          <button class="btn-ghost btn-sm" id="history-btn">view all</button>
         </div>
         ${renderRecentLogs(logs)}
       </div>
@@ -626,7 +625,7 @@ function renderHome() {
         const uStreak = streakFor(u.logs);
         const uToday = todayFor(u.logs);
         const isMe = u.key === key;
-        return `<div class="user-row" onclick="renderHistory('${u.key}', '${u.name.replace(/'/g,"\\'")}', ${isMe})">
+        return `<div class="user-row" data-ukey="${u.key}" data-uname="${u.name.replace(/"/g,'&quot;')}">
           <div class="rank">${i + 1}</div>
           <div class="avatar">${initials(u.name)}</div>
           <div style="flex:1;min-width:0">
@@ -641,15 +640,18 @@ function renderHome() {
       }).join('')}
 
       <div style="margin-top:1.5rem;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-ghost btn-sm btn-danger" onclick="doSignOut()">sign out</button>
+        <button class="btn-ghost btn-sm btn-danger" id="signout-btn">sign out</button>
       </div>
     </div>
   `;
 
-  setTimeout(() => {
-    const inp = document.getElementById('pcount');
-    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') doLog(); });
-  }, 50);
+  document.getElementById('log-btn').addEventListener('click', doLog);
+  document.getElementById('history-btn').addEventListener('click', () => renderHistory(key, me, true));
+  document.getElementById('signout-btn').addEventListener('click', doSignOut);
+  document.getElementById('pcount').addEventListener('keydown', e => { if (e.key === 'Enter') doLog(); });
+  document.querySelectorAll('.user-row[data-ukey]').forEach(row => {
+    row.addEventListener('click', () => renderHistory(row.dataset.ukey, row.dataset.uname, row.dataset.ukey === key));
+  });
 }
 
 function renderRecentLogs(logs) {
@@ -675,7 +677,7 @@ function renderHistory(userKey, userName, isMe) {
 
   s.innerHTML = `
     <div class="fade-up">
-      <button class="back-btn" onclick="renderHome()">← back</button>
+      <button class="back-btn" id="back-btn">← back</button>
       <p class="card-label" style="margin-bottom:0.75rem">full history — ${userName}</p>
       <div class="card">
         ${days.length
@@ -684,6 +686,7 @@ function renderHistory(userKey, userName, isMe) {
       </div>
     </div>
   `;
+  document.getElementById('back-btn').addEventListener('click', renderHome);
 }
 
 async function doLog() {
