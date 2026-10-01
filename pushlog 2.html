@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pushlog</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #181818;
+    --surface2: #222;
+    --border: #2d2d2d;
+    --text: #f0ede8;
+    --muted: #666;
+    --accent: #e8d5a3;
+    --accent2: #c4a96b;
+    --accent-dim: #1e1a0f;
+    --accent-border: #7a5a2a;
+    --green: #5a9e6f;
+    --mono: 'DM Mono', monospace;
+    --display: 'Syne', sans-serif;
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  #app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 5rem;
+  }
+
+  /* ── Typography ── */
+  .wordmark {
+    font-family: var(--display);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .wordmark span { color: var(--accent); }
+  .wordmark::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2.6rem, 9vw, 4.2rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.4rem;
+  }
+  h1 em { color: var(--accent); font-style: normal; }
+
+  .tagline {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 0.875rem;
+  }
+
+  .card-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.875rem;
+  }
+
+  /* ── Inputs & Buttons ── */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 11px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input:focus { border-color: var(--accent2); }
+  input::placeholder { color: var(--muted); }
+
+  /* hide number spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type="number"] { -moz-appearance: textfield; }
+
+  button {
+    font-family: var(--mono);
+    font-size: 13px;
+    border-radius: var(--radius);
+    padding: 11px 20px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0d0d0d;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { border-color: var(--accent2); background: var(--surface); }
+
+  .btn-sm { padding: 7px 14px; font-size: 12px; }
+  .btn-danger { border-color: #5a2020; color: #c46060; }
+  .btn-danger:hover { background: #1a0d0d; border-color: #c46060; }
+
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  .row input { flex: 1; }
+
+  /* ── Stats ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 0.875rem;
+  }
+
+  .stat {
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding: 0.875rem;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: var(--display);
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── Crew rows ── */
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .user-row:last-child { border-bottom: none; }
+  .user-row:hover { opacity: 0.8; }
+
+  .avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .user-name { font-size: 14px; font-weight: 500; flex: 1; }
+  .user-total {
+    font-family: var(--display);
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-align: right;
+  }
+  .user-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .rank { font-size: 10px; color: var(--muted); width: 18px; flex-shrink: 0; text-align: right; }
+
+  /* ── Pills ── */
+  .pill {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 9px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .pill.hot { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+
+  .me-badge {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    text-transform: uppercase;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+
+  /* ── Log entries ── */
+  .log-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .log-row:last-child { border-bottom: none; }
+  .log-date { font-size: 11px; color: var(--muted); width: 72px; flex-shrink: 0; }
+  .log-count { font-family: var(--display); font-weight: 700; font-size: 15px; }
+
+  /* ── Misc ── */
+  .divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+
+  .today-banner {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 2rem 0;
+  }
+
+  .back-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.05em;
+  }
+  .back-btn:hover { color: var(--text); }
+
+  .note {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 0.625rem;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #0d0d0d;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 100;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Config notice ── */
+  #config-notice {
+    background: #1a0d0d;
+    border: 1px solid #5a2020;
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 12px;
+    color: #c46060;
+    line-height: 1.7;
+    display: none;
+  }
+  #config-notice strong { color: #e07070; display: block; margin-bottom: 4px; font-size: 13px; }
+  #config-notice code {
+    background: #2a1010;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #e07070;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp 0.3s ease both; }
+
+  /* ── Mobile ── */
+  @media (max-width: 480px) {
+    #app { padding: 1.75rem 1rem 5rem; }
+    .stat-val { font-size: 1.45rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     CONFIGURATION — paste your Firebase config below
+     ═══════════════════════════════════════════════════ -->
+<script>
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCVHFAEXQf1VxAgm9hXVUocCvRJrZTKA_w",
+    authDomain: "pushlog-v1.firebaseapp.com",
+    databaseURL: "https://pushlog-v1-default-rtdb.firebaseio.com",
+    projectId: "pushlog-v1",
+    storageBucket: "pushlog-v1.firebasestorage.app",
+    messagingSenderId: "513754119249",
+    appId: "1:513754119249:web:3c379a439567851e270c70"
+  };
+
+  // ↓ Change this to whatever passphrase your crew will use ↓
+  const GROUP_CODE = "pushups2025";
+</script>
+<!-- ═══════════════════════════════════════════════════ -->
+
+<div id="app">
+  <div class="wordmark">push<span>log</span></div>
+  <div id="config-notice">
+    <strong>Firebase not configured yet</strong>
+    Open this file in a text editor and paste your Firebase config into the <code>FIREBASE_CONFIG</code> object at the top of the file. See the setup guide for instructions.
+  </div>
+  <div id="screen"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ── Globals ──────────────────────────────────────────
+let db = null;
+let me = localStorage.getItem('pushlog-user') || null;
+let unsubscribe = null;
+let crewData = {};
+
+// ── Firebase init ─────────────────────────────────────
+function initFirebase() {
+  if (FIREBASE_CONFIG.apiKey === "PASTE_YOUR_API_KEY_HERE") {
+    document.getElementById('config-notice').style.display = 'block';
+    return false;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    return true;
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    return false;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDate(d) {
+  const [, m, day] = d.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[parseInt(m)-1]} ${parseInt(day)}`;
+}
+
+function initials(name) {
+  return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function totalFor(logs) {
+  if (!logs) return 0;
+  return Object.values(logs).reduce((s, l) => s + (l.count || 0), 0);
+}
+
+function todayFor(logs) {
+  if (!logs) return 0;
+  const t = today();
+  return Object.values(logs).filter(l => l.date === t).reduce((s, l) => s + (l.count || 0), 0);
+}
+
+function streakFor(logs) {
+  if (!logs) return 0;
+  const days = [...new Set(Object.values(logs).map(l => l.date))].sort((a,b) => b.localeCompare(a));
+  if (!days.length) return 0;
+  let streak = 0;
+  const t = today();
+  let cur = t;
+  for (const d of days) {
+    if (d === cur) {
+      streak++;
+      const dt = new Date(cur);
+      dt.setDate(dt.getDate() - 1);
+      cur = dt.toISOString().slice(0, 10);
+    } else if (streak === 0) {
+      // allow yesterday as start
+      const yesterday = new Date(t);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (d === yesterday.toISOString().slice(0, 10)) {
+        streak++;
+        const dt = new Date(d);
+        dt.setDate(dt.getDate() - 1);
+        cur = dt.toISOString().slice(0, 10);
+      } else break;
+    } else break;
+  }
+  return streak;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  setTimeout(() => t.style.opacity = '0', 2200);
+}
+
+// ── Real-time listener ────────────────────────────────
+function listenToCrew() {
+  if (!db) return;
+  const ref = db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users`);
+  ref.on('value', snap => {
+    crewData = snap.val() || {};
+    if (me) renderHome();
+  });
+}
+
+function sanitizeCode(code) {
+  return code.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+}
+
+// ── Screens ───────────────────────────────────────────
+function render() {
+  if (!me) renderAuth();
+  else renderHome();
+}
+
+function renderAuth() {
+  const s = document.getElementById('screen');
+  s.innerHTML = `
+    <div class="fade-up">
+      <h1>drop<br><em>&amp; give</em><br>me reps.</h1>
+      <p class="tagline" style="margin-bottom:2rem">daily pushups · crew accountability</p>
+
+      <div class="card">
+        <div class="card-label">group code</div>
+        <input type="password" id="gcode" placeholder="enter group code" autocomplete="off" />
+        <p class="note">ask your crew for the code to join the board</p>
+      </div>
+
+      <div class="card">
+        <div class="card-label">your name</div>
+        <div class="row">
+          <input type="text" id="uname" placeholder="what should we call you?" maxlength="28" />
+          <button class="btn-primary" id="join-btn">join</button>
+        </div>
+        <p class="note">pick any name — this is how your crew will see you</p>
+      </div>
+    </div>
+  `;
+  document.getElementById('join-btn').addEventListener('click', doJoin);
+  document.getElementById('gcode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('uname').focus(); });
+  document.getElementById('uname').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+}
+
+function doJoin() {
+  const code = document.getElementById('gcode').value.trim();
+  const name = document.getElementById('uname').value.trim();
+  if (!code) { document.getElementById('gcode').focus(); return; }
+  if (!name) { document.getElementById('uname').focus(); return; }
+
+  if (code !== GROUP_CODE) {
+    showToast('wrong group code — try again');
+    return;
+  }
+
+  me = name;
+  localStorage.setItem('pushlog-user', me);
+
+  // ensure user node exists
+  if (db) {
+    db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users/${sanitizeCode(me)}/meta`).set({ name: me, joined: today() });
+  }
+
+  listenToCrew();
+  render();
+}
+
+function renderHome() {
+  const s = document.getElementById('screen');
+  const key = sanitizeCode(me);
+  const myData = crewData[key] || {};
+  const logs = myData.logs || {};
+  const streak = streakFor(logs);
+  const total = totalFor(logs);
+  const tc = todayFor(logs);
+
+  const allUsers = Object.entries(crewData)
+    .map(([k, v]) => ({ key: k, name: (v.meta && v.meta.name) || k, logs: v.logs || {} }))
+    .sort((a, b) => totalFor(b.logs) - totalFor(a.logs));
+
+  s.innerHTML = `
+    <div class="fade-up">
+      <h1><em>${me}</em></h1>
+      <p class="tagline" style="margin-bottom:1.25rem">your stats</p>
+
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-val">${total.toLocaleString()}</div>
+          <div class="stat-lbl">all time</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">${tc}</div>
+          <div class="stat-lbl">today</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">${streak}</div>
+          <div class="stat-lbl">${streak === 1 ? 'day' : 'days'} streak</div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem"></div>
+
+      <div class="card">
+        <div class="card-label">log pushups</div>
+        ${tc > 0 ? `<div class="today-banner"><div class="dot"></div>you've logged ${tc} today — add more below</div>` : ''}
+        <div class="row">
+          <input type="number" id="pcount" placeholder="how many?" min="1" max="9999" />
+          <button class="btn-primary" id="log-btn">log</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <div class="card-label" style="margin:0">your recent logs</div>
+          <button class="btn-ghost btn-sm" id="history-btn">view all</button>
+        </div>
+        ${renderRecentLogs(logs)}
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="card-label" style="margin-bottom:0.75rem">crew · ${allUsers.length} member${allUsers.length === 1 ? '' : 's'}</div>
+
+      ${allUsers.map((u, i) => {
+        const uTotal = totalFor(u.logs);
+        const uStreak = streakFor(u.logs);
+        const uToday = todayFor(u.logs);
+        const isMe = u.key === key;
+        return `<div class="user-row" data-ukey="${u.key}" data-uname="${u.name.replace(/"/g,'&quot;')}">
+          <div class="rank">${i + 1}</div>
+          <div class="avatar">${initials(u.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="user-name">${u.name}${isMe ? '<span class="me-badge">you</span>' : ''}</div>
+            <div class="user-sub"><span class="pill ${uStreak >= 3 ? 'hot' : ''}">${uStreak}d streak</span></div>
+          </div>
+          <div>
+            <div class="user-total">${uTotal.toLocaleString()}</div>
+            <div class="user-sub" style="text-align:right">${uToday} today</div>
+          </div>
+        </div>`;
+      }).join('')}
+
+      <div style="margin-top:1.5rem;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ghost btn-sm btn-danger" id="signout-btn">sign out</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('log-btn').addEventListener('click', doLog);
+  document.getElementById('history-btn').addEventListener('click', () => renderHistory(key, me, true));
+  document.getElementById('signout-btn').addEventListener('click', doSignOut);
+  document.getElementById('pcount').addEventListener('keydown', e => { if (e.key === 'Enter') doLog(); });
+  document.querySelectorAll('.user-row[data-ukey]').forEach(row => {
+    row.addEventListener('click', () => renderHistory(row.dataset.ukey, row.dataset.uname, row.dataset.ukey === key));
+  });
+}
+
+function renderRecentLogs(logs) {
+  const entries = Object.values(logs);
+  if (!entries.length) return '<div class="empty">nothing logged yet — drop some reps!</div>';
+  const sorted = entries.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  return sorted.map(l => `
+    <div class="log-row">
+      <span class="log-date">${fmtDate(l.date)}</span>
+      <span class="log-count">${l.count.toLocaleString()}</span>
+    </div>`).join('');
+}
+
+function renderHistory(userKey, userName, isMe) {
+  const s = document.getElementById('screen');
+  const data = (crewData[userKey] && crewData[userKey].logs) || {};
+  const entries = Object.values(data);
+
+  // aggregate by date
+  const byDate = {};
+  entries.forEach(l => { byDate[l.date] = (byDate[l.date] || 0) + l.count; });
+  const days = Object.entries(byDate).sort((a, b) => b[0].localeCompare(a[0]));
+
+  s.innerHTML = `
+    <div class="fade-up">
+      <button class="back-btn" id="back-btn">← back</button>
+      <p class="card-label" style="margin-bottom:0.75rem">full history — ${userName}</p>
+      <div class="card">
+        ${days.length
+          ? days.map(([d, c]) => `<div class="log-row"><span class="log-date">${fmtDate(d)}</span><span class="log-count">${c.toLocaleString()}</span></div>`).join('')
+          : '<div class="empty">no entries yet</div>'}
+      </div>
+    </div>
+  `;
+  document.getElementById('back-btn').addEventListener('click', renderHome);
+}
+
+async function doLog() {
+  const inp = document.getElementById('pcount');
+  const v = parseInt(inp.value);
+  if (!v || v < 1) { inp.focus(); return; }
+
+  if (!db) { showToast('firebase not configured yet'); return; }
+
+  const key = sanitizeCode(me);
+  const ref = db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users/${key}/logs`).push();
+  await ref.set({ date: today(), count: v });
+
+  inp.value = '';
+  showToast(`+${v} reps logged!`);
+}
+
+function doSignOut() {
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  me = null;
+  crewData = {};
+  localStorage.removeItem('pushlog-user');
+  render();
+}
+
+// ── Boot ──────────────────────────────────────────────
+const ready = initFirebase();
+if (ready) listenToCrew();
+render();
+</script>
+</body>
+</html>
