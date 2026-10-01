@@ -395,7 +395,7 @@
   };
 
   // ↓ Change this to whatever passphrase your crew will use ↓
-  const GROUP_CODE = "powerup";
+  const GROUP_CODE = "pushups2025";
 </script>
 <!-- ═══════════════════════════════════════════════════ -->
 
@@ -413,8 +413,9 @@
 // ── Globals ──────────────────────────────────────────
 let db = null;
 let me = localStorage.getItem('pushlog-user') || null;
-let unsubscribe = null;
 let crewData = {};
+let activeListener = null;
+let viewingMonth = null; // null = current month
 
 // ── Firebase init ─────────────────────────────────────
 function initFirebase() {
@@ -435,6 +436,18 @@ function initFirebase() {
 // ── Helpers ───────────────────────────────────────────
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function monthKey(offset = 0) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset);
+  return d.toISOString().slice(0, 7); // e.g. "2026-10"
+}
+
+function fmtMonth(key) {
+  const [y, m] = key.split('-');
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${names[parseInt(m) - 1]} ${y}`;
 }
 
 function fmtDate(d) {
@@ -472,7 +485,6 @@ function streakFor(logs) {
       dt.setDate(dt.getDate() - 1);
       cur = dt.toISOString().slice(0, 10);
     } else if (streak === 0) {
-      // allow yesterday as start
       const yesterday = new Date(t);
       yesterday.setDate(yesterday.getDate() - 1);
       if (d === yesterday.toISOString().slice(0, 10)) {
@@ -493,18 +505,39 @@ function showToast(msg) {
   setTimeout(() => t.style.opacity = '0', 2200);
 }
 
+function sanitizeCode(code) {
+  return code.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+}
+
+function dbPath(mk) {
+  return `groups/${sanitizeCode(GROUP_CODE)}/${mk}/users`;
+}
+
+function isCurrentMonth() {
+  return !viewingMonth || viewingMonth === monthKey();
+}
+
 // ── Real-time listener ────────────────────────────────
-function listenToCrew() {
+function listenToCrew(mk) {
   if (!db) return;
-  const ref = db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users`);
+  if (activeListener) activeListener.off();
+  const ref = db.ref(dbPath(mk));
+  activeListener = ref;
   ref.on('value', snap => {
     crewData = snap.val() || {};
     if (me) renderHome();
   });
 }
 
-function sanitizeCode(code) {
-  return code.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+// ── Past months ───────────────────────────────────────
+async function loadPastMonths() {
+  if (!db) return [];
+  const snap = await db.ref(`groups/${sanitizeCode(GROUP_CODE)}`).once('value');
+  const data = snap.val() || {};
+  const cur = monthKey();
+  return Object.keys(data)
+    .filter(k => /^\d{4}-\d{2}$/.test(k) && k < cur)
+    .sort((a, b) => b.localeCompare(a));
 }
 
 // ── Screens ───────────────────────────────────────────
@@ -555,23 +588,26 @@ function doJoin() {
   me = name;
   localStorage.setItem('pushlog-user', me);
 
-  // ensure user node exists
   if (db) {
-    db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users/${sanitizeCode(me)}/meta`).set({ name: me, joined: today() });
+    const mk = monthKey();
+    db.ref(`${dbPath(mk)}/${sanitizeCode(me)}/meta`).set({ name: me, joined: today() });
   }
 
-  listenToCrew();
+  viewingMonth = null;
+  listenToCrew(monthKey());
   render();
 }
 
 function renderHome() {
   const s = document.getElementById('screen');
+  const mk = viewingMonth || monthKey();
+  const isCurrent = isCurrentMonth();
   const key = sanitizeCode(me);
   const myData = crewData[key] || {};
   const logs = myData.logs || {};
-  const streak = streakFor(logs);
+  const streak = isCurrent ? streakFor(logs) : 0;
   const total = totalFor(logs);
-  const tc = todayFor(logs);
+  const tc = isCurrent ? todayFor(logs) : 0;
 
   const allUsers = Object.entries(crewData)
     .map(([k, v]) => ({ key: k, name: (v.meta && v.meta.name) || k, logs: v.logs || {} }))
@@ -580,25 +616,30 @@ function renderHome() {
   s.innerHTML = `
     <div class="fade-up">
       <h1><em>${me}</em></h1>
-      <p class="tagline" style="margin-bottom:1.25rem">your stats</p>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+        <p class="tagline" style="margin:0">${fmtMonth(mk)}${isCurrent ? ' · current' : ' · archived'}</p>
+        <button class="btn-ghost btn-sm" id="past-btn">past months</button>
+      </div>
 
       <div class="stat-grid">
         <div class="stat">
           <div class="stat-val">${total.toLocaleString()}</div>
-          <div class="stat-lbl">all time</div>
+          <div class="stat-lbl">${isCurrent ? 'this month' : 'total'}</div>
         </div>
         <div class="stat">
-          <div class="stat-val">${tc}</div>
+          <div class="stat-val">${isCurrent ? tc : '—'}</div>
           <div class="stat-lbl">today</div>
         </div>
         <div class="stat">
-          <div class="stat-val">${streak}</div>
+          <div class="stat-val">${isCurrent ? streak : '—'}</div>
           <div class="stat-lbl">${streak === 1 ? 'day' : 'days'} streak</div>
         </div>
       </div>
 
       <div style="margin-top:1rem"></div>
 
+      ${isCurrent ? `
       <div class="card">
         <div class="card-label">log pushups</div>
         ${tc > 0 ? `<div class="today-banner"><div class="dot"></div>you've logged ${tc} today — add more below</div>` : ''}
@@ -606,11 +647,11 @@ function renderHome() {
           <input type="number" id="pcount" placeholder="how many?" min="1" max="9999" />
           <button class="btn-primary" id="log-btn">log</button>
         </div>
-      </div>
+      </div>` : ''}
 
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
-          <div class="card-label" style="margin:0">your recent logs</div>
+          <div class="card-label" style="margin:0">your logs</div>
           <button class="btn-ghost btn-sm" id="history-btn">view all</button>
         </div>
         ${renderRecentLogs(logs)}
@@ -622,19 +663,19 @@ function renderHome() {
 
       ${allUsers.map((u, i) => {
         const uTotal = totalFor(u.logs);
-        const uStreak = streakFor(u.logs);
-        const uToday = todayFor(u.logs);
+        const uStreak = isCurrent ? streakFor(u.logs) : 0;
+        const uToday = isCurrent ? todayFor(u.logs) : 0;
         const isMe = u.key === key;
         return `<div class="user-row" data-ukey="${u.key}" data-uname="${u.name.replace(/"/g,'&quot;')}">
           <div class="rank">${i + 1}</div>
           <div class="avatar">${initials(u.name)}</div>
           <div style="flex:1;min-width:0">
             <div class="user-name">${u.name}${isMe ? '<span class="me-badge">you</span>' : ''}</div>
-            <div class="user-sub"><span class="pill ${uStreak >= 3 ? 'hot' : ''}">${uStreak}d streak</span></div>
+            <div class="user-sub">${isCurrent ? `<span class="pill ${uStreak >= 3 ? 'hot' : ''}">${uStreak}d streak</span>` : ''}</div>
           </div>
           <div>
             <div class="user-total">${uTotal.toLocaleString()}</div>
-            <div class="user-sub" style="text-align:right">${uToday} today</div>
+            ${isCurrent ? `<div class="user-sub" style="text-align:right">${uToday} today</div>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -645,12 +686,15 @@ function renderHome() {
     </div>
   `;
 
-  document.getElementById('log-btn').addEventListener('click', doLog);
-  document.getElementById('history-btn').addEventListener('click', () => renderHistory(key, me, true));
+  if (isCurrent) {
+    document.getElementById('log-btn').addEventListener('click', doLog);
+    document.getElementById('pcount').addEventListener('keydown', e => { if (e.key === 'Enter') doLog(); });
+  }
+  document.getElementById('history-btn').addEventListener('click', () => renderHistory(key, me));
   document.getElementById('signout-btn').addEventListener('click', doSignOut);
-  document.getElementById('pcount').addEventListener('keydown', e => { if (e.key === 'Enter') doLog(); });
+  document.getElementById('past-btn').addEventListener('click', renderPastMonths);
   document.querySelectorAll('.user-row[data-ukey]').forEach(row => {
-    row.addEventListener('click', () => renderHistory(row.dataset.ukey, row.dataset.uname, row.dataset.ukey === key));
+    row.addEventListener('click', () => renderHistory(row.dataset.ukey, row.dataset.uname));
   });
 }
 
@@ -665,12 +709,11 @@ function renderRecentLogs(logs) {
     </div>`).join('');
 }
 
-function renderHistory(userKey, userName, isMe) {
+function renderHistory(userKey, userName) {
   const s = document.getElementById('screen');
+  const mk = viewingMonth || monthKey();
   const data = (crewData[userKey] && crewData[userKey].logs) || {};
   const entries = Object.values(data);
-
-  // aggregate by date
   const byDate = {};
   entries.forEach(l => { byDate[l.date] = (byDate[l.date] || 0) + l.count; });
   const days = Object.entries(byDate).sort((a, b) => b[0].localeCompare(a[0]));
@@ -678,7 +721,8 @@ function renderHistory(userKey, userName, isMe) {
   s.innerHTML = `
     <div class="fade-up">
       <button class="back-btn" id="back-btn">← back</button>
-      <p class="card-label" style="margin-bottom:0.75rem">full history — ${userName}</p>
+      <p class="card-label" style="margin-bottom:0.25rem">full log — ${userName}</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:0.875rem">${fmtMonth(mk)}</p>
       <div class="card">
         ${days.length
           ? days.map(([d, c]) => `<div class="log-row"><span class="log-date">${fmtDate(d)}</span><span class="log-count">${c.toLocaleString()}</span></div>`).join('')
@@ -689,15 +733,51 @@ function renderHistory(userKey, userName, isMe) {
   document.getElementById('back-btn').addEventListener('click', renderHome);
 }
 
+async function renderPastMonths() {
+  const s = document.getElementById('screen');
+  s.innerHTML = `<div class="fade-up"><button class="back-btn" id="back-btn">← back</button><p class="card-label" style="margin-bottom:0.75rem">past months</p><div class="empty">loading...</div></div>`;
+  document.getElementById('back-btn').addEventListener('click', () => { viewingMonth = null; listenToCrew(monthKey()); renderHome(); });
+
+  const past = await loadPastMonths();
+  const cur = monthKey();
+
+  const monthList = [cur, ...past].map(mk => {
+    const isCur = mk === cur;
+    return `<div class="user-row" data-mk="${mk}" style="cursor:pointer">
+      <div style="flex:1">
+        <div class="user-name">${fmtMonth(mk)}${isCur ? '<span class="me-badge">current</span>' : ''}</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">view →</div>
+    </div>`;
+  }).join('');
+
+  s.innerHTML = `
+    <div class="fade-up">
+      <button class="back-btn" id="back-btn">← back</button>
+      <p class="card-label" style="margin-bottom:0.75rem">past months</p>
+      <div class="card">
+        ${past.length > 0 ? monthList : `<div class="user-row" data-mk="${cur}" style="cursor:pointer"><div style="flex:1"><div class="user-name">${fmtMonth(cur)}<span class="me-badge">current</span></div></div><div style="font-size:12px;color:var(--muted)">view →</div></div><p class="note" style="margin-top:0.875rem">no past months yet — check back next month!</p>`}
+      </div>
+    </div>
+  `;
+  document.getElementById('back-btn').addEventListener('click', () => { viewingMonth = null; listenToCrew(monthKey()); renderHome(); });
+  document.querySelectorAll('.user-row[data-mk]').forEach(row => {
+    row.addEventListener('click', () => {
+      viewingMonth = row.dataset.mk;
+      listenToCrew(viewingMonth);
+    });
+  });
+}
+
 async function doLog() {
   const inp = document.getElementById('pcount');
   const v = parseInt(inp.value);
   if (!v || v < 1) { inp.focus(); return; }
-
   if (!db) { showToast('firebase not configured yet'); return; }
 
+  const mk = monthKey();
   const key = sanitizeCode(me);
-  const ref = db.ref(`groups/${sanitizeCode(GROUP_CODE)}/users/${key}/logs`).push();
+  const ref = db.ref(`${dbPath(mk)}/${key}/logs`).push();
   await ref.set({ date: today(), count: v });
 
   inp.value = '';
@@ -705,16 +785,17 @@ async function doLog() {
 }
 
 function doSignOut() {
-  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  if (activeListener) { activeListener.off(); activeListener = null; }
   me = null;
   crewData = {};
+  viewingMonth = null;
   localStorage.removeItem('pushlog-user');
   render();
 }
 
 // ── Boot ──────────────────────────────────────────────
 const ready = initFirebase();
-if (ready) listenToCrew();
+if (ready) listenToCrew(monthKey());
 render();
 </script>
 </body>
